@@ -5,3 +5,4 @@ boto3~=1.26.76
 flask~=3.0.0
 python-jwt
 pytest~=6.2.5
+pylint
