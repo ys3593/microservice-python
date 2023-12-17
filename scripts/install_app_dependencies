@@ -1,3 +1,4 @@
 #!/bin/bash
+cd deployment-root
 ls
 pip install -r requirements.txt
