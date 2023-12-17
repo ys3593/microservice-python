@@ -15,3 +15,7 @@ def test_jobs(app, client):
 def test_jobs_id(app, client):
     res = client.get('/jobs/1')
     assert res.status_code == 200
+
+def test_test(app, client):
+    res = client.get('/test')
+    assert res.status_code == 200
