@@ -1,0 +1,3 @@
+#!/bin/bash
+cd microservice-python
+nohup python3 app.py &
