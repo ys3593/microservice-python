@@ -245,6 +245,10 @@ def delete_posting(posting_id):
     conn.close()
     return jsonify({'message': 'Posting deleted'}), 200
 
+@app.route('/test', methods=['GET'])
+def delete_posting(posting_id):
+    return jsonify({'message': 'Testing'}), 200
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
 
