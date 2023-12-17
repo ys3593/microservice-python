@@ -1,4 +1,3 @@
 #!/bin/bash
-cd lib
-ls
+cd /home/ubuntu/microservice-python
 pip install -r requirements.txt

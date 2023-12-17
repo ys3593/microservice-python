@@ -2,7 +2,7 @@ version: 0.0
 os: linux
 files:
  - source: .
-   destination: /microservice-python
+   destination: /home/ubuntu/microservice-python
 hooks:
   AfterInstall:
    - location: scripts/install_app_dependencies
