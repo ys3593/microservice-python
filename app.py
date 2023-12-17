@@ -161,7 +161,7 @@ def create_posting():
 
     return jsonify({'message': 'Posting created'}), 201
 
-@app.route('/job', methods=['GET'])
+@app.route('/jobs', methods=['GET'])
 def get_all_posting():
     conn = get_db_connection()
     cursor = conn.cursor()

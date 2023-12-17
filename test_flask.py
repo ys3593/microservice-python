@@ -9,7 +9,7 @@ def client(app):
     return app.test_client()
 
 def test_jobs(app, client):
-    res = client.get('/job')
+    res = client.get('/jobs')
     assert res.status_code == 200
 
 def test_jobs_id(app, client):
