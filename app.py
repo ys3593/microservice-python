@@ -5,6 +5,7 @@ import requests
 import base64
 from jwt.algorithms import RSAAlgorithm
 import boto3
+import json
 
 app = Flask(__name__)
 
@@ -14,91 +15,6 @@ def get_db_connection():
                            password='Ea12345678!',
                            db='6156service',
                            cursorclass=pymysql.cursors.DictCursor)
-
-def exchange_code_for_token(code):
-    app.logger.info('Exchanging code for token')
-    token_url = 'https://linkliv.auth.us-east-2.amazoncognito.com/oauth2/token'
-    client_id = '5in91u4mqc5kbjhb0b15vfecpf'
-    client_secret = 's7uu8f5lt7c8ges8aekk0f05ttc7c9ep03k8iqk3bss5ifsi975'
-    redirect_uri = 'https://xz9t45v28k.execute-api.us-east-2.amazonaws.com/beta/login'
-
-    client_auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-
-    data = {
-        'grant_type': 'authorization_code',
-        'client_id': client_id,
-        'code': code,
-        'redirect_uri': redirect_uri
-    }
-
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': f'Basic {client_auth}'
-    }
-
-    response = requests.post(token_url, data=data, headers=headers)
-    if response.status_code != 200:
-        app.logger.info(f"Failed to exchange code for token: {response.json()}")
-        return None
-    return response.json()
-
-def get_pem_from_jwks(jwks, kid):
-    app.logger.info('Retrieving PEM from JWKS')
-    for key in jwks['keys']:
-        if key['kid'] == kid:
-            return RSAAlgorithm.from_jwk(key)
-    app.logger.info('No matching KID found in JWKS')
-    return None
-
-def validate_token(token):
-    app.logger.info('Validating token')
-    jwks_url = 'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_ZqnrAhXRt/.well-known/jwks.json'
-    jwks = requests.get(jwks_url).json()
-
-    headers = jwt.get_unverified_header(token)
-    kid = headers['kid']
-
-    pem = get_pem_from_jwks(jwks, kid)
-    if pem is None:
-        app.logger.info('PEM is None')
-        return False
-
-    try:
-        jwt.decode(token, pem, algorithms=['RS256'])
-        app.logger.info('Token successfully validated')
-        return True
-    except jwt.ExpiredSignatureError:
-        app.logger.info('Token expired')
-        return False
-    except jwt.InvalidTokenError:
-        app.logger.info('Invalid token')
-        return False
-
-def handle_token(code):
-    app.logger.info('Handling token')
-    if not code:
-        app.logger.info('No code provided')
-        return None
-
-    token_response = exchange_code_for_token(code)
-    if not token_response:
-        app.logger.info('No token response')
-        return None
-
-    access_token = token_response.get('access_token')
-    if not access_token:
-        app.logger.info('No access token found in response')
-        return None
-
-    try:
-        if validate_token(access_token):
-            return access_token
-    except jwt.ExpiredSignatureError:
-        app.logger.info('Token expired during handling')
-    except jwt.InvalidTokenError:
-        app.logger.info('Invalid token during handling')
-
-    return None
 
 def publish_to_sns(subject, message):
     topicArn = 'arn:aws:sns:us-east-2:858059470707:6156topic'
@@ -113,53 +29,59 @@ def publish_to_sns(subject, message):
 
     app.logger.info(response['ResponseMetadata']['HTTPStatusCode'])
 
-
-
-
-
-
-
-
-
-
-
-
-@app.route('/login')
-def login():
-    code = request.args.get('code')
-
-    if not code:
-        app.logger.info('No code provided')
-        return jsonify({'message': 'No code provided'}), 400
-
-    access_token = handle_token(code)
-
-    if not access_token:
-        app.logger.info('Authentication failed')
-        return jsonify({'message': 'Unauthorized'}), 401
-
-    # return jsonify({'message': 'Success'})
-    frontend_url = 'http://lionkedin-angular.s3-website-us-east-1.amazonaws.com/home'
-    return redirect(f"{frontend_url}?access_token={access_token}")
+def get_cognito_jwks(user_pool_id, region):
+    jwks_uri = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
+    'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_ZqnrAhXRt/.well-known/jwks.json'
+    response = requests.get(jwks_uri)
+    return response.json()['keys']
 
 @app.route('/jobs', methods=['POST'])
 def create_posting():
-    data = request.json
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    query = '''INSERT INTO posting (category, description, employerID, experience, location, package, title, type)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)'''
-    cursor.execute(query, (data['category'], data['description'], data['employerID'], data['experience'], 
-                           data['location'], data['package'], data['title'], data['type']))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'message': 'No token provided'}), 401
+    try:
+        user_pool_id = 'us-east-2_ZqnrAhXRt'
+        region = 'us-east-2'
+        
+        jwks = get_cognito_jwks(user_pool_id, region)
 
-    subject = 'New Job Posting: ' + data['title']
-    message = 'A new job posting has been added to the database. Title: ' + data['title']
-    publish_to_sns(subject, message)
+        headers = jwt.get_unverified_header(token)
+        key = next((k for k in jwks if k['kid'] == headers['kid']), None)
 
-    return jsonify({'message': 'Posting created'}), 201
+        if key is None:
+            return jsonify({'message': 'Invalid token. Key ID not found.'}), 401
+
+        rsa_key = RSAAlgorithm.from_jwk(json.dumps(key))
+        decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
+
+        uuid = decoded.get('sub')
+        app.logger.info('uuid: ', uuid)
+        data = request.json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        query = '''INSERT INTO posting (category, description, employerID, experience, location, package, title, type)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)'''
+        cursor.execute(query, (data['category'], data['description'], uuid, data['experience'], 
+                               data['location'], data['package'], data['title'], data['type']))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # subject = 'New Job Posting: ' + data['title']
+        # message = 'A new job posting has been added to the database. Title: ' + data['title']
+        # publish_to_sns(subject, message)
+
+        return jsonify({'message': 'Posting created'}), 201
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({'message': 'Signature expired. Please log in again.'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token. Please log in again.'}), 401
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
 
 @app.route('/jobs', methods=['GET'])
 def get_all_posting():
@@ -244,11 +166,6 @@ def delete_posting(posting_id):
     cursor.close()
     conn.close()
     return jsonify({'message': 'Posting deleted'}), 200
-
-@app.route('/test', methods=['GET'])
-def testing():
-    return jsonify({'message': 'Testing!!'})
-
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
