@@ -29,11 +29,21 @@ def publish_to_sns(subject, message):
     response = snsClient.publish(TopicArn=topicArn, Message=message, Subject= subject)
     app.logger.info(response['ResponseMetadata']['HTTPStatusCode'])
 
-def get_cognito_jwks(user_pool_id, region):
+def get_uuid_from_token(token):
+    user_pool_id = 'us-east-2_ZqnrAhXRt'
+    region = 'us-east-2'
+    
     jwks_uri = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
-    'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_ZqnrAhXRt/.well-known/jwks.json'
-    response = requests.get(jwks_uri)
-    return response.json()['keys']
+    jwks = requests.get(jwks_uri).json()['keys']
+    headers = jwt.get_unverified_header(token)
+    key = next((k for k in jwks if k['kid'] == headers['kid']), None)
+    
+    if key is None:
+        raise ValueError("Invalid token. Key ID not found.")
+
+    rsa_key = RSAAlgorithm.from_jwk(json.dumps(key))
+    decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
+    return decoded.get('sub')
 
 @app.route('/jobs', methods=['POST'])
 def create_posting():
@@ -41,22 +51,9 @@ def create_posting():
     if not token:
         return jsonify({'message': 'No token provided'}), 401
     try:
-        user_pool_id = 'us-east-2_ZqnrAhXRt'
-        region = 'us-east-2'
-        
-        jwks = get_cognito_jwks(user_pool_id, region)
-
-        headers = jwt.get_unverified_header(token)
-        key = next((k for k in jwks if k['kid'] == headers['kid']), None)
-
-        if key is None:
-            return jsonify({'message': 'Invalid token. Key ID not found.'}), 401
-
-        rsa_key = RSAAlgorithm.from_jwk(json.dumps(key))
-        decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
-
-        uuid = decoded.get('sub')
+        uuid = get_uuid_from_token(token)
         print(uuid)
+        
         data = request.json
         conn = get_db_connection()
         cursor = conn.cursor()
