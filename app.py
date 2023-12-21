@@ -159,6 +159,42 @@ def get_employer_posting():
         return jsonify({'message': str(e)}), 500
 
 
+@app.route('/jobs/my', methods=['GET'])
+def get_my_posting():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'message': 'No token provided'}), 401
+
+    try:
+        uuid = get_uuid_from_token(token)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        query_student = '''
+        SELECT p.* FROM posting p
+        JOIN application a ON p.postingID = a.postingID
+        WHERE a.studentID = %s
+        '''
+        cursor.execute(query_student, (uuid,))
+        student_result = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'data': student_result
+        })
+
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 401
+    except jwt.ExpiredSignatureError:
+        return jsonify({'message': 'Signature expired. Please log in again.'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token. Please log in again.'}), 401
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
 @app.route('/jobs/<int:posting_id>', methods=['GET'])
 def get_posting(posting_id):
     conn = get_db_connection()
