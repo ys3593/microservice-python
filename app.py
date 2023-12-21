@@ -9,6 +9,7 @@ import json
 
 app = Flask(__name__)
 
+# mysql -h mysql-database.czrn9xpuxd4a.us-east-2.rds.amazonaws.com -u admin -pEa12345678!
 def get_db_connection():
     return pymysql.connect(host='mysql-database.czrn9xpuxd4a.us-east-2.rds.amazonaws.com',
                            user='admin',
@@ -26,7 +27,6 @@ def publish_to_sns(subject, message):
     )
 
     response = snsClient.publish(TopicArn=topicArn, Message=message, Subject= subject)
-
     app.logger.info(response['ResponseMetadata']['HTTPStatusCode'])
 
 def get_cognito_jwks(user_pool_id, region):
@@ -167,8 +167,9 @@ def delete_posting(posting_id):
     conn.close()
     return jsonify({'message': 'Posting deleted'}), 200
 
+@app.route('/test', methods=['GET'])
+def testing():
+    return jsonify({'message': 'Testing!!'})
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
-
-
-# mysql -h mysql-database.czrn9xpuxd4a.us-east-2.rds.amazonaws.com -u admin -pEa12345678!
