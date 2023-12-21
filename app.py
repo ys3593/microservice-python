@@ -17,6 +17,7 @@ def get_db_connection():
                            db='6156service',
                            cursorclass=pymysql.cursors.DictCursor)
 
+
 def publish_to_sns(subject, message):
     topicArn = 'arn:aws:sns:us-east-2:858059470707:6156topic'
     snsClient = boto3.client(
@@ -28,6 +29,7 @@ def publish_to_sns(subject, message):
 
     response = snsClient.publish(TopicArn=topicArn, Message=message, Subject= subject)
     app.logger.info(response['ResponseMetadata']['HTTPStatusCode'])
+
 
 def get_uuid_from_token(token):
     user_pool_id = 'us-east-2_ZqnrAhXRt'
@@ -45,6 +47,7 @@ def get_uuid_from_token(token):
     decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
     return decoded.get('sub')
 
+
 @app.route('/jobs', methods=['POST'])
 def create_posting():
     token = request.headers.get('Authorization')
@@ -53,7 +56,7 @@ def create_posting():
     try:
         uuid = get_uuid_from_token(token)
         print(uuid)
-        
+
         data = request.json
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -122,6 +125,40 @@ def get_all_posting():
         'limit': limit
     })
 
+
+@app.route('/jobs/employer', methods=['GET'])
+def get_employer_posting():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'message': 'No token provided'}), 401
+
+    try:
+        uuid = get_uuid_from_token(token)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        query = "SELECT * FROM posting WHERE employerID = %s"
+
+        cursor.execute(query, (uuid,))
+        result = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            'data': result,
+        })
+
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 401
+    except jwt.ExpiredSignatureError:
+        return jsonify({'message': 'Signature expired. Please log in again.'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token. Please log in again.'}), 401
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
 @app.route('/jobs/<int:posting_id>', methods=['GET'])
 def get_posting(posting_id):
     conn = get_db_connection()
@@ -139,6 +176,7 @@ def get_posting(posting_id):
     else:
         return jsonify({'message': 'Job posting not found'}), 404
 
+
 @app.route('/jobs/<int:posting_id>', methods=['PUT'])
 def update_posting(posting_id):
     data = request.json
@@ -153,6 +191,7 @@ def update_posting(posting_id):
     conn.close()
     return jsonify({'message': 'Posting updated'}), 200
 
+
 @app.route('/jobs/<int:posting_id>', methods=['DELETE'])
 def delete_posting(posting_id):
     conn = get_db_connection()
@@ -164,9 +203,11 @@ def delete_posting(posting_id):
     conn.close()
     return jsonify({'message': 'Posting deleted'}), 200
 
+
 @app.route('/test', methods=['GET'])
 def testing():
     return jsonify({'message': 'Testing!!'})
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
