@@ -61,10 +61,10 @@ def create_posting():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        query = '''INSERT INTO posting (category, description, employerID, experience, location, package, title, type)
+        query = '''INSERT INTO posting (category, description, employerID, experience, location, package, title, type, company_name)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)'''
         cursor.execute(query, (data['category'], data['description'], uuid, data['experience'], 
-                               data['location'], data['package'], data['title'], data['type']))
+                               data['location'], data['package'], data['title'], data['type'], data['company_name']))
         conn.commit()
         cursor.close()
         conn.close()
