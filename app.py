@@ -247,7 +247,7 @@ def delete_posting(posting_id):
 
 @app.route('/test', methods=['GET'])
 def testing():
-    return jsonify({'message': 'Testing!!'})
+    return jsonify({'message': 'Testing'})
 
 
 if __name__ == '__main__':
