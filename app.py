@@ -56,13 +56,13 @@ def create_posting():
         decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
 
         uuid = decoded.get('sub')
-        app.logger.info('uuid: ', uuid)
+        print(uuid)
         data = request.json
         conn = get_db_connection()
         cursor = conn.cursor()
 
         query = '''INSERT INTO posting (category, description, employerID, experience, location, package, title, type, company_name)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)'''
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)'''
         cursor.execute(query, (data['category'], data['description'], uuid, data['experience'], 
                                data['location'], data['package'], data['title'], data['type'], data['company_name']))
         conn.commit()
