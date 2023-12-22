@@ -32,6 +32,21 @@ def publish_to_sns(subject, message):
     response = snsClient.publish(TopicArn=topicArn, Message=message, Subject= subject)
     app.logger.info(response['ResponseMetadata']['HTTPStatusCode'])
 
+def get_uuid_from_token(token):
+    user_pool_id = 'us-east-2_ZqnrAhXRt'
+    region = 'us-east-2'
+    
+    jwks_uri = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
+    jwks = requests.get(jwks_uri).json()['keys']
+    headers = jwt.get_unverified_header(token)
+    key = next((k for k in jwks if k['kid'] == headers['kid']), None)
+    
+    if key is None:
+        raise ValueError("Invalid token. Key ID not found.")
+
+    rsa_key = RSAAlgorithm.from_jwk(json.dumps(key))
+    decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
+    return decoded.get('sub')
 
 def get_info_from_token(id_token, access_token):
     user_pool_id = 'us-east-2_ZqnrAhXRt'
@@ -68,8 +83,8 @@ def create_posting():
         uuid, scopes = get_info_from_token(id_token, access_token)
         print("UUID:", uuid)
         print("Scopes:", scopes)
-        
-        required_scope = 'create:jobs'
+
+        required_scope = 'https:example.com/create:jobs'
         if required_scope not in scopes:
             return jsonify({'message': 'Insufficient scope'}), 403
 
