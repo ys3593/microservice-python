@@ -33,35 +33,43 @@ def publish_to_sns(subject, message):
     app.logger.info(response['ResponseMetadata']['HTTPStatusCode'])
 
 
-def get_uuid_from_token(token):
+def get_info_from_token(id_token, access_token):
     user_pool_id = 'us-east-2_ZqnrAhXRt'
     region = 'us-east-2'
-    
+
     jwks_uri = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
     jwks = requests.get(jwks_uri).json()['keys']
-    headers = jwt.get_unverified_header(token)
-    key = next((k for k in jwks if k['kid'] == headers['kid']), None)
-    
-    if key is None:
-        raise ValueError("Invalid token. Key ID not found.")
 
-    rsa_key = RSAAlgorithm.from_jwk(json.dumps(key))
-    decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
-    uuid = decoded.get('sub')
-    scopes = decoded.get('scope', '').split()
+    id_headers = jwt.get_unverified_header(id_token)
+    id_key = next((k for k in jwks if k['kid'] == id_headers['kid']), None)
+    if id_key is None:
+        raise ValueError("Invalid ID token. Key ID not found.")
+    rsa_key = RSAAlgorithm.from_jwk(json.dumps(id_key))
+    id_decoded = jwt.decode(id_token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
+    uuid = id_decoded.get('sub')
+
+    access_headers = jwt.get_unverified_header(access_token)
+    access_key = next((k for k in jwks if k['kid'] == access_headers['kid']), None)
+    if access_key is None:
+        raise ValueError("Invalid access token. Key ID not found.")
+    rsa_key = RSAAlgorithm.from_jwk(json.dumps(access_key))
+    access_decoded = jwt.decode(access_token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
+    scopes = access_decoded.get('scope', '').split()
 
     return uuid, scopes
 
-
 @app.route('/jobs', methods=['POST'])
 def create_posting():
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({'message': 'No token provided'}), 401
+    id_token = request.headers.get('Authorization')
+    access_token = request.headers.get('Authorization2')
+    if not id_token or not access_token:
+        return jsonify({'message': 'Tokens not provided'}), 401
     try:
-        uuid, scopes = get_uuid_and_scope_from_token(token)
-        print(uuid, scopes)
-
+        uuid, scopes = get_info_from_token(id_token, access_token)
+        print("UUID:", uuid)
+        print("Scopes:", scopes)
+        
+        required_scope = 'create:jobs'
         if required_scope not in scopes:
             return jsonify({'message': 'Insufficient scope'}), 403
 
