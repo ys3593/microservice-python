@@ -47,7 +47,10 @@ def get_uuid_from_token(token):
 
     rsa_key = RSAAlgorithm.from_jwk(json.dumps(key))
     decoded = jwt.decode(token, rsa_key, algorithms=['RS256'], options={'verify_aud': False, 'verify_iss': False})
-    return decoded.get('sub')
+    uuid = decoded.get('sub')
+    scopes = decoded.get('scope', '').split()
+
+    return uuid, scopes
 
 
 @app.route('/jobs', methods=['POST'])
@@ -56,8 +59,11 @@ def create_posting():
     if not token:
         return jsonify({'message': 'No token provided'}), 401
     try:
-        uuid = get_uuid_from_token(token)
-        print(uuid)
+        uuid, scopes = get_uuid_and_scope_from_token(token)
+        print(uuid, scopes)
+
+        if required_scope not in scopes:
+            return jsonify({'message': 'Insufficient scope'}), 403
 
         data = request.json
         conn = get_db_connection()
