@@ -6,6 +6,8 @@ import base64
 from jwt.algorithms import RSAAlgorithm
 import boto3
 import json
+import time
+import logging
 
 app = Flask(__name__)
 
@@ -244,6 +246,19 @@ def delete_posting(posting_id):
 def testing():
     return jsonify({'message': 'Testing!!'})
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("FlaskApp")
+
+def logger_middleware(app):
+    def middleware(environ, start_response):
+        start = time.time()
+        response = app(environ, start_response)
+        duration = time.time() - start
+        logger.info(f"Received {environ['REQUEST_METHOD']} request on {environ['PATH_INFO']} - {duration:.2f}s")
+        return response
+    return middleware
+app.wsgi_app = logger_middleware(app.wsgi_app)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    logging.basicConfig(level=logging.INFO)
+    app.run(debug=True, host='0.0.0.0', port=5000)
